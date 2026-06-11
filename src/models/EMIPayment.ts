@@ -16,4 +16,5 @@ export interface CreateEMIPaymentInput {
   amtPaid: number;
   recordedBy: string;
   recordedByName: string;
+  // paidAt intentionally omitted — controller uses serverTimestamp() to avoid client/server conflict
 }

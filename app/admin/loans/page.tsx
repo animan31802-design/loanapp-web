@@ -5,6 +5,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import LoanCard from "@/components/shared/LoanCard";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
+import RefreshButton from "@/components/shared/RefreshButton";
 import { getPendingLoans, getFundedLoans } from "@/controllers/LoanController";
 import { Loan } from "@/models/Loan";
 
@@ -39,11 +40,7 @@ export default function LoanRequestsPage() {
       <PageHeader
         title="Loan Requests"
         subtitle={`${pending.length} pending · ${funded.length} funded`}
-        action={
-          <button onClick={loadLoans} className="text-sm text-[#4B4BF7] font-semibold hover:underline">
-            Refresh
-          </button>
-        }
+        action={<RefreshButton onRefresh={loadLoans} />}
       />
 
       {/* Tabs */}

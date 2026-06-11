@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
-import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { getPendingLoans, getActiveLoans, getFundedLoans } from "@/controllers/LoanController";
 import { getPendingVerifications } from "@/controllers/EMIController";
 import { getPendingWithdrawals } from "@/controllers/WithdrawalController";
@@ -25,16 +24,30 @@ export default function AdminDashboard() {
     }).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <><PageHeader title="Dashboard" /><LoadingSpinner /></>;
+  const statCards = [
+    { label: "Loan Requests", value: stats.pending, icon: "📋", bg: "bg-amber-50", color: "text-amber-600", href: "/admin/loans" },
+    { label: "Active Loans", value: stats.active, icon: "✅", bg: "bg-blue-50", color: "text-blue-600", href: "/admin/active-loans" },
+    { label: "Verify Payments", value: stats.payments, icon: "🔍", bg: "bg-purple-50", color: "text-purple-600", href: "/admin/payments" },
+    { label: "Withdrawals", value: stats.withdrawals, icon: "💸", bg: "bg-rose-50", color: "text-rose-600", href: "/admin/withdrawals" },
+  ];
 
   return (
     <div>
       <PageHeader title="Admin Dashboard" subtitle="Overview of all loan activity" />
       <div className="px-4 md:px-6 grid grid-cols-2 gap-3 mb-6">
-        <StatCard label="Loan Requests" value={stats.pending} icon="📋" bg="bg-amber-50" color="text-amber-600" onClick={() => router.push("/admin/loans")} />
-        <StatCard label="Active Loans" value={stats.active} icon="✅" bg="bg-blue-50" color="text-blue-600" onClick={() => router.push("/admin/active-loans")} />
-        <StatCard label="Verify Payments" value={stats.payments} icon="🔍" bg="bg-purple-50" color="text-purple-600" onClick={() => router.push("/admin/payments")} />
-        <StatCard label="Withdrawals" value={stats.withdrawals} icon="💸" bg="bg-rose-50" color="text-rose-600" onClick={() => router.push("/admin/withdrawals")} />
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm animate-pulse">
+                <div className="w-10 h-10 bg-gray-100 rounded-xl mb-3" />
+                <div className="h-7 w-12 bg-gray-100 rounded mb-2" />
+                <div className="h-3 w-24 bg-gray-100 rounded" />
+              </div>
+            ))
+          : statCards.map(c => (
+              <StatCard key={c.label} label={c.label} value={c.value} icon={c.icon}
+                bg={c.bg} color={c.color} onClick={() => router.push(c.href)} />
+            ))
+        }
       </div>
       <div className="px-4 md:px-6">
         <h2 className="text-base font-bold text-gray-700 mb-3">Management</h2>
