@@ -58,18 +58,22 @@ export const approveLoan = async (input: ApproveLoanInput): Promise<void> => {
   const { deductLoanContributions } = await import("@/controllers/WalletController");
   const { createShare } = await import("@/controllers/ShareController");
 
-  const members = await getAllMembers();
-  if (!members || members.length === 0) throw new Error("No members found.");
+  // If FUNDED, wallet deductions already happened — only create shares and mark ACTIVE.
+  // If PENDING, run the full deduction flow.
+  if (loan.status !== LoanStatus.FUNDED) {
+    const members = await getAllMembers();
+    if (!members || members.length === 0) throw new Error("No members found.");
 
-  const contributions = await deductLoanContributions(
-    input.loanId, loan.loanNumber || input.loanId,
-    Number(loan.requestedAmt),
-    members.map((m: any) => ({ memberId: m.uid, memberName: m.name }))
-  );
+    const contributions = await deductLoanContributions(
+      input.loanId, loan.loanNumber || input.loanId,
+      Number(loan.requestedAmt),
+      members.map((m: any) => ({ memberId: m.uid, memberName: m.name }))
+    );
 
-  for (const c of contributions) {
-    if (c.contributeAmt > 0) {
-      await createShare(input.loanId, c.memberId, c.memberName, c.contributeAmt, c.shareRatio, c.fromReturns || 0, c.fromInvestment || 0);
+    for (const c of contributions) {
+      if (c.contributeAmt > 0) {
+        await createShare(input.loanId, c.memberId, c.memberName, c.contributeAmt, c.shareRatio, c.fromReturns || 0, c.fromInvestment || 0);
+      }
     }
   }
 
@@ -121,22 +125,11 @@ export const markDisbursed = async (loanId: string): Promise<void> => {
   if (!loan) throw new Error("Loan not found");
 
   const { getSharesByLoan } = await import("@/controllers/ShareController");
-  const { getWalletByMember } = await import("@/controllers/WalletController");
+  const { markShareDisbursed } = await import("@/controllers/WalletController");
 
   const shares = await getSharesByLoan(loanId);
   for (const share of shares) {
-    const wallet = await getWalletByMember((share as any).memberId);
-    if (!wallet) continue;
-    const contributed = Number((share as any).shareAmt);
-    const currentInvestment = Number(wallet.investmentBalance);
-    const alreadyReduced = currentInvestment < contributed;
-    const newInvestment = alreadyReduced ? currentInvestment : Math.max(0, Math.round((currentInvestment - contributed) * 100) / 100);
-    const newFree = Math.max(0, newInvestment);
-    const newTotal = Math.round((newInvestment + Number(wallet.returnsBalance)) * 100) / 100;
-    await updateDoc(COLLECTIONS.WALLETS, wallet.walletId, {
-      investmentBalance: newInvestment, deployedBalance: 0,
-      freeInvestment: newFree, totalBalance: newTotal,
-    });
+    await markShareDisbursed((share as any).memberId, Number((share as any).shareAmt));
   }
 
   await updateDoc(COLLECTIONS.LOANS, loanId, { disbursed: true, disbursedAt: serverTimestamp() });
@@ -152,6 +145,10 @@ export const getLoanById = async (loanId: string): Promise<Loan | null> => {
 
 export const getPendingLoans = async (): Promise<Loan[]> => {
   return (await queryDocs(COLLECTIONS.LOANS, [{ field: "status", op: "==", value: LoanStatus.PENDING }])) as Loan[];
+};
+
+export const getFundedLoans = async (): Promise<Loan[]> => {
+  return (await queryDocs(COLLECTIONS.LOANS, [{ field: "status", op: "==", value: LoanStatus.FUNDED }])) as Loan[];
 };
 
 export const getActiveLoans = async (): Promise<Loan[]> => {

@@ -44,7 +44,7 @@ export default function LoanDetailPage() {
     try {
       const { getEMISplit } = await import("@/controllers/EMIController");
       const split = getEMISplit(loan, nextEMI);
-      await recordEMIPayment({ loanId: id, emiNumber: nextEMI, amtPaid: split.totalEMI, recordedBy: userProfile.uid, recordedByName: userProfile.name, paidAt: new Date() });
+      await recordEMIPayment({ loanId: id, emiNumber: nextEMI, amtPaid: split.totalEMI, recordedBy: userProfile.uid, recordedByName: userProfile.name });
       toast.success(`EMI #${nextEMI} recorded! Awaiting admin verification.`);
       loadAll();
     } catch (e: any) { toast.error(e.message || "Failed"); }
@@ -115,7 +115,7 @@ export default function LoanDetailPage() {
               <div className="h-2 bg-[#4B4BF7] rounded-full transition-all" style={{width:`${Math.round(paidCount/months*100)}%`}} />
             </div>
             <p className="text-xs text-gray-500 mb-3">{paidCount} of {months} verified · {months-paidCount} remaining</p>
-            {payments.slice(-3).reverse().map((p: any) => (
+            {[...payments].reverse().map((p: any) => (
               <div key={p.paymentId||p.id} className="flex justify-between items-center py-2 border-t border-gray-50">
                 <span className="text-sm text-gray-600">EMI #{p.emiNumber}</span>
                 <span className="font-bold text-gray-900">{formatCurrency(p.amtPaid)}</span>

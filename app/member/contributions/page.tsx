@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
+import RefreshButton from "@/components/shared/RefreshButton";
 import { getSharesByMember } from "@/controllers/ShareController";
 import { getLoanById } from "@/controllers/LoanController";
 import { getEMIPaymentsByLoan } from "@/controllers/EMIController";
@@ -20,28 +21,29 @@ export default function ContributionsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!userProfile) return;
-    (async () => {
-      try {
-        const shares = await getSharesByMember(userProfile.uid);
-        const enriched = await Promise.all(shares.map(async (s: any) => {
-          const loan = await getLoanById(s.loanId).catch(() => null);
-          const payments = loan ? await getEMIPaymentsByLoan(s.loanId).catch(() => []) : [];
-          const verified = payments.filter((p: any) => p.verified);
-          const returnsEarned = verified.reduce((sum: number, p: any) => {
-            const principal = Number(p.principalPortion) || 0;
-            const interest = Number(p.interestPortion) || 0;
-            return sum + (principal * Number(s.shareRatio)) + ((interest * 0.9) * Number(s.shareRatio));
-          }, 0);
-          return { ...s, loan, paidCount: verified.length, months: Number(loan?.tenureMonths)||0, returnsEarned: Math.round(returnsEarned*100)/100, isDisbursed: (loan as any)?.disbursed===true };
-        }));
-        enriched.sort((a,b) => (a.loan?.status==="ACTIVE"?-1:1) - (b.loan?.status==="ACTIVE"?-1:1));
-        setItems(enriched);
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    })();
+    setLoading(true);
+    try {
+      const shares = await getSharesByMember(userProfile.uid);
+      const enriched = await Promise.all(shares.map(async (s: any) => {
+        const loan = await getLoanById(s.loanId).catch(() => null);
+        const payments = loan ? await getEMIPaymentsByLoan(s.loanId).catch(() => []) : [];
+        const verified = payments.filter((p: any) => p.verified);
+        const returnsEarned = verified.reduce((sum: number, p: any) => {
+          const principal = Number(p.principalPortion) || 0;
+          const interest = Number(p.interestPortion) || 0;
+          return sum + (principal * Number(s.shareRatio)) + ((interest * 0.9) * Number(s.shareRatio));
+        }, 0);
+        return { ...s, loan, paidCount: verified.length, months: Number(loan?.tenureMonths)||0, returnsEarned: Math.round(returnsEarned*100)/100, isDisbursed: (loan as any)?.disbursed===true };
+      }));
+      enriched.sort((a,b) => (a.loan?.status==="ACTIVE"?-1:1) - (b.loan?.status==="ACTIVE"?-1:1));
+      setItems(enriched);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, [userProfile]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const totalContributed = items.reduce((s, i) => s + Number(i.shareAmt), 0);
   const totalReturns = items.reduce((s, i) => s + Number(i.returnsEarned), 0);
@@ -49,7 +51,7 @@ export default function ContributionsPage() {
 
   return (
     <div>
-      <PageHeader title="My Contributions" />
+      <PageHeader title="My Contributions" action={<RefreshButton onRefresh={loadData} />} />
       <div className="px-4 space-y-4 pb-10">
         {loading ? <LoadingSpinner /> : (
           <>

@@ -164,9 +164,22 @@ export default function ActiveLoanDetailPage() {
               className="w-full py-3 bg-[#4B4BF7] text-white font-bold rounded-xl hover:bg-[#3b3be0] disabled:opacity-50">
               {submitting?"Updating...":"✅ Mark as Disbursed"}
             </button>
-            <button onClick={()=>{if(confirm("Cancel loan? Contributions will be refunded.")) cancelLoan(id).then(()=>{toast.success("Cancelled");router.back();}).catch((e:any)=>toast.error(e.message));}}
-              className="w-full py-3 border-2 border-red-300 text-red-500 font-bold rounded-xl hover:bg-red-50">
-              Cancel Loan (Refund Members)
+            <button
+              onClick={async () => {
+                if (!confirm("Cancel loan? Contributions will be refunded.")) return;
+                setSubmitting(true);
+                try {
+                  await cancelLoan(id);
+                  toast.success("Loan cancelled and members refunded");
+                  router.back();
+                } catch (e: any) {
+                  toast.error(e.message);
+                  setSubmitting(false);
+                }
+              }}
+              disabled={submitting}
+              className="w-full py-3 border-2 border-red-300 text-red-500 font-bold rounded-xl hover:bg-red-50 disabled:opacity-50">
+              {submitting ? "Processing..." : "Cancel Loan (Refund Members)"}
             </button>
           </div>
         )}

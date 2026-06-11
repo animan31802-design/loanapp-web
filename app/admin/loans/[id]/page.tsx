@@ -96,7 +96,8 @@ export default function LoanApprovalPage() {
   if (loading) return <LoadingSpinner fullPage />;
   if (!loan) return <div className="p-6 text-center text-gray-500">Loan not found</div>;
 
-  const isPending = loan.status === LoanStatus.PENDING;
+  const isPending = loan.status === LoanStatus.PENDING || loan.status === LoanStatus.FUNDED;
+  const isFunded = loan.status === LoanStatus.FUNDED;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -149,6 +150,11 @@ export default function LoanApprovalPage() {
               {canFund?"✓ Sufficient":"✗ Insufficient"}
             </span>
           </div>
+          {isFunded && (
+            <div className="mb-3 p-3 bg-blue-50 rounded-xl">
+              <p className="text-xs text-blue-700 font-semibold">✅ Loan is FUNDED — wallet deductions already applied. Approving will move it to ACTIVE without re-deducting.</p>
+            </div>
+          )}
           <p className="text-xs text-gray-500 mb-3">Total available: {formatCurrency(totalAvailable)}{!canFund && ` · Shortfall: ${formatCurrency(shortfall)}`}</p>
           {contributions.map(c=>(
             <div key={c.memberId} className="flex items-center justify-between py-2 border-t border-gray-50">

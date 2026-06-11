@@ -58,6 +58,15 @@ export default function WalletPage() {
         await reduceInvestment(userProfile.uid, amt);
         toast.success(`Investment reduced by ${formatCurrency(amt)}`);
       } else if (modal === "withdraw") {
+        // Re-fetch wallet to validate against live balance (not stale UI state).
+        const { getOrCreateWallet: freshWallet } = await import("@/controllers/WalletController");
+        const liveWallet = await freshWallet(userProfile.uid, userProfile.name);
+        const liveRet = Number(liveWallet?.returnsBalance) || 0;
+        if (amt > liveRet) {
+          toast.error(`Insufficient returns balance. Available: ${formatCurrency(liveRet)}`);
+          await loadData();
+          return;
+        }
         await requestWithdrawal({ memberId: userProfile.uid, memberName: userProfile.name, amount: amt });
         toast.success("Withdrawal request submitted!");
       }

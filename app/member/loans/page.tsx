@@ -1,12 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/components/shared/PageHeader";
 import LoanCard from "@/components/shared/LoanCard";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
+import RefreshButton from "@/components/shared/RefreshButton";
 import { getAllLoans } from "@/controllers/LoanController";
-import { Loan, } from "@/models/Loan";
+import { Loan } from "@/models/Loan";
 import { LoanStatus } from "@/constants/Enums";
 import { Plus } from "lucide-react";
 
@@ -19,13 +20,18 @@ export default function MemberLoansPage() {
   const [filter, setFilter] = useState<Filter>("All");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    getAllLoans().then(setLoans).catch(console.error).finally(() => setLoading(false));
+  const loadLoans = useCallback(async () => {
+    setLoading(true);
+    try { const l = await getAllLoans(); setLoans(l); }
+    catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, []);
+
+  useEffect(() => { loadLoans(); }, [loadLoans]);
 
   const filtered = loans.filter(l => {
     if (filter === "All") return true;
-    if (filter === "Pending") return l.status === LoanStatus.PENDING;
+    if (filter === "Pending") return l.status === LoanStatus.PENDING || l.status === LoanStatus.FUNDED;
     if (filter === "Active") return l.status === LoanStatus.ACTIVE;
     if (filter === "Closed") return (l.status as string) === "CLOSED";
     return true;
@@ -33,13 +39,19 @@ export default function MemberLoansPage() {
 
   return (
     <div>
-      <PageHeader title="All Loans" subtitle={`${loans.length} total`}
+      <PageHeader
+        title="All Loans"
+        subtitle={`${loans.length} total`}
         action={
-          <button onClick={() => router.push("/member/loans/new")}
-            className="flex items-center gap-1.5 bg-[#4B4BF7] text-white px-3 py-2 rounded-xl text-sm font-semibold">
-            <Plus size={16} /> New
-          </button>
-        } />
+          <div className="flex items-center gap-2">
+            <RefreshButton onRefresh={loadLoans} />
+            <button onClick={() => router.push("/member/loans/new")}
+              className="flex items-center gap-1.5 bg-[#4B4BF7] text-white px-3 py-2 rounded-xl text-sm font-semibold">
+              <Plus size={16} /> New
+            </button>
+          </div>
+        }
+      />
 
       {/* Filters */}
       <div className="px-4 flex gap-2 mb-4 overflow-x-auto pb-1">

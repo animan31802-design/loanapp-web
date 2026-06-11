@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
-import { getPendingLoans, getActiveLoans } from "@/controllers/LoanController";
+import { getPendingLoans, getActiveLoans, getFundedLoans } from "@/controllers/LoanController";
 import { getPendingVerifications } from "@/controllers/EMIController";
 import { getPendingWithdrawals } from "@/controllers/WithdrawalController";
 
@@ -16,11 +16,12 @@ export default function AdminDashboard() {
   useEffect(() => {
     Promise.all([
       getPendingLoans().catch(() => []),
+      getFundedLoans().catch(() => []),
       getActiveLoans().catch(() => []),
       getPendingVerifications().catch(() => []),
       getPendingWithdrawals().catch(() => []),
-    ]).then(([pending, active, payments, withdrawals]) => {
-      setStats({ pending: pending.length, active: active.length, payments: payments.length, withdrawals: withdrawals.length });
+    ]).then(([pending, funded, active, payments, withdrawals]) => {
+      setStats({ pending: pending.length + funded.length, active: active.length, payments: payments.length, withdrawals: withdrawals.length });
     }).finally(() => setLoading(false));
   }, []);
 

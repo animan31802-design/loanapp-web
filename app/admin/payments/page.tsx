@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
+import RefreshButton from "@/components/shared/RefreshButton";
 import { getPendingVerifications, verifyEMIPayment } from "@/controllers/EMIController";
 import { getLoanById } from "@/controllers/LoanController";
 import { formatCurrency, formatDate } from "@/utils/Formatters";
@@ -16,9 +16,8 @@ export default function PaymentVerificationPage() {
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState<string | null>(null);
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await getPendingVerifications();
       const enriched = await Promise.all(data.map(async (p: any) => {
@@ -30,7 +29,9 @@ export default function PaymentVerificationPage() {
       setPayments(enriched);
     } catch (e: any) { toast.error(e.message || "Failed to load"); }
     finally { setLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleVerify = async (payment: any) => {
     const docId = payment.id || payment.paymentId;
@@ -46,7 +47,11 @@ export default function PaymentVerificationPage() {
 
   return (
     <div>
-      <PageHeader title="Payment Verification" subtitle="Verify EMI payments from members" />
+      <PageHeader
+        title="Payment Verification"
+        subtitle="Verify EMI payments from members"
+        action={<RefreshButton onRefresh={loadData} />}
+      />
       <div className="px-4 md:px-6 space-y-3">
         {loading ? <LoadingSpinner /> : payments.length === 0 ? (
           <EmptyState icon="✅" title="No Pending Verifications" subtitle="All EMI payments have been verified" />

@@ -2,7 +2,7 @@ import {
   queryDocs, setDoc, updateDoc, generateId, serverTimestamp, COLLECTIONS,
 } from "@/services/FirebaseService";
 import { EMIPayment, CreateEMIPaymentInput } from "@/models/EMIPayment";
-import { LoanMode } from "@/constants/Enums";
+import { LoanMode, LoanStatus } from "@/constants/Enums";
 import { roundMoney } from "@/utils/WalletCalculator";
 
 export const getEMISplit = (
@@ -89,8 +89,7 @@ export const verifyEMIPayment = async (paymentId: string, loanId: string, amtPai
 
   const months = Number(loan.tenureMonths) || 0;
   if (months > 0 && emiNumber >= months) {
-    const { updateDoc: upDoc } = await import("@/services/FirebaseService");
-    await upDoc(COLLECTIONS.LOANS, loanId, { status: "CLOSED", closedAt: serverTimestamp() });
+    await updateDoc(COLLECTIONS.LOANS, loanId, { status: LoanStatus.CLOSED, closedAt: serverTimestamp() });
   }
 
   try {
@@ -111,5 +110,7 @@ export const getPendingVerifications = async (): Promise<EMIPayment[]> => {
 
 export const getNextEMINumber = async (loanId: string): Promise<number> => {
   const payments = await getEMIPaymentsByLoan(loanId);
-  return payments.length + 1;
+  if (payments.length === 0) return 1;
+  const maxEmi = Math.max(...payments.map((p: any) => Number(p.emiNumber) || 0));
+  return maxEmi + 1;
 };

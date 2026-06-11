@@ -16,5 +16,4 @@ export interface CreateEMIPaymentInput {
   amtPaid: number;
   recordedBy: string;
   recordedByName: string;
-  paidAt: Date;
 }

@@ -29,8 +29,17 @@ export default function MemberDetailPage() {
       getWalletTransactions(id),
       getLoansByMember(id),
       getSharesByMember(id),
-    ]).then(([m, w, t, l, s]) => {
-      setMember(m); setWallet(w); setTxns(t); setLoans(l); setShares(s);
+    ]).then(async ([m, w, t, l, rawShares]) => {
+      setMember(m); setWallet(w); setTxns(t); setLoans(l);
+      // Enrich shares with loan info so the tab shows useful labels
+      const { getLoanById } = await import("@/controllers/LoanController");
+      const enriched = await Promise.all((rawShares as any[]).map(async (s) => {
+        try {
+          const loan = await getLoanById(s.loanId);
+          return { ...s, loanNumber: loan?.loanNumber || s.loanId, customerName: loan?.customerName || "—" };
+        } catch { return { ...s, loanNumber: s.loanId, customerName: "—" }; }
+      }));
+      setShares(enriched);
     }).catch((e: any) => toast.error(e.message)).finally(() => setLoading(false));
   }, [id]);
 
@@ -90,7 +99,7 @@ export default function MemberDetailPage() {
                 <div key={t.id || i} className="bg-white rounded-xl p-3 flex justify-between items-center">
                   <div>
                     <p className="text-xs font-semibold text-gray-600">{t.type}</p>
-                    <p className="text-xs text-gray-400 mt-0.5" style={{maxWidth:"200px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.note}</p>
+                    <p className="text-xs text-gray-400 mt-0.5 break-words whitespace-normal">{t.note}</p>
                     <p className="text-xs text-gray-300">{formatDate(t.createdAt)}</p>
                   </div>
                   <p className={`font-bold ${Number(t.amount) >= 0 ? "text-green-600" : "text-red-500"}`}>{Number(t.amount)>=0?"+":""}{formatCurrency(Math.abs(Number(t.amount)))}</p>
@@ -102,13 +111,16 @@ export default function MemberDetailPage() {
           <div className="space-y-2">
             {loans.length === 0 ? <p className="text-center text-gray-400 py-8">No loans found</p> :
               loans.map((l: any) => (
-                <div key={l.loanId||l.id} className="bg-white rounded-xl p-3">
+                <div key={l.loanId||l.id}
+                  onClick={() => router.push(`/admin/active-loans/${l.id || l.loanId}`)}
+                  className="bg-white rounded-xl p-3 cursor-pointer hover:bg-gray-50 transition-colors active:scale-[0.98]">
                   <p className="text-xs font-bold text-[#4B4BF7]">{l.loanNumber}</p>
                   <p className="font-semibold text-gray-900">{l.customerName}</p>
                   <div className="flex justify-between mt-1">
                     <p className="text-sm text-gray-500">{formatCurrency(l.requestedAmt)}</p>
                     <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{l.status}</span>
                   </div>
+                  <p className="text-xs text-[#4B4BF7] mt-1 font-medium">View loan →</p>
                 </div>
               ))}
           </div>
@@ -119,7 +131,8 @@ export default function MemberDetailPage() {
               shares.map((s: any) => (
                 <div key={s.shareId||s.id} className="bg-white rounded-xl p-3 flex justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{s.loanId}</p>
+                    <p className="text-xs font-bold text-[#4B4BF7]">{s.loanNumber}</p>
+                    <p className="text-sm font-semibold text-gray-900">{s.customerName}</p>
                     <p className="text-xs text-gray-400">{((Number(s.shareRatio)||0)*100).toFixed(1)}% share</p>
                   </div>
                   <p className="font-bold text-[#4B4BF7]">{formatCurrency(s.shareAmt)}</p>

@@ -1,0 +1,222 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LoanApp — Firestore Security Rules
+//
+// Role model:
+//   admin  → full read/write on every collection
+//   member → read most data; write only their own wallet inputs + loan requests
+//
+// The "admin" role is stored in /users/{uid}.role.
+// We cache the caller's role in a helper function to avoid repetition.
+//
+// Key decisions:
+//   • Wallet balances are NEVER writable directly by members — only by admins
+//     or server-side (Firebase Admin SDK via API routes).
+//   • EMI payments can be created by members (recording), but verified only by admin.
+//   • Withdrawal requests can be created by members; approval is admin-only.
+//   • Notifications are write-only for the server; members can read their own.
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUid() {
+      return request.auth.uid;
+    }
+
+    // Reads the caller's profile doc — used for role checks.
+    // Firestore caches document reads within a rule evaluation, so this is
+    // safe to call multiple times without extra billing.
+    function callerRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && callerRole() == 'admin';
+    }
+
+    function isMember() {
+      return isSignedIn() && callerRole() == 'member';
+    }
+
+    function isAdminOrMember() {
+      return isAdmin() || isMember();
+    }
+
+    // Checks that a field is not being changed in an update
+    function fieldUnchanged(field) {
+      return !(field in request.resource.data) ||
+             request.resource.data[field] == resource.data[field];
+    }
+
+    // ── /users ────────────────────────────────────────────────────────────────
+    // Admins: full CRUD.
+    // Members: read any user (need to see finder names etc.), update only their
+    //          own non-sensitive fields. Cannot change role or uid.
+    // Create: admin-only (via API route using Admin SDK — bypasses these rules,
+    //         but we still block client-side create for safety).
+
+    match /users/{uid} {
+      allow read: if isAdminOrMember();
+
+      // Admin SDK (server) writes bypass rules entirely, so this only affects
+      // direct client writes. Block client-side user creation.
+      allow create: if isAdmin();
+
+      allow update: if isAdmin() ||
+        (isMember() && currentUid() == uid &&
+         fieldUnchanged('role') &&
+         fieldUnchanged('uid'));
+
+      allow delete: if isAdmin();
+    }
+
+    // ── /wallets ──────────────────────────────────────────────────────────────
+    // Balances must NEVER be writeable by members directly.
+    // Members may read their own wallet only.
+    // All wallet mutations happen server-side (WalletController via Admin SDK or
+    // trusted client controllers called from admin UI).
+
+    match /wallets/{walletId} {
+      allow read: if isAdmin() ||
+        (isMember() && resource.data.memberId == currentUid());
+
+      // Only admins can write wallets from the client.
+      // Server-side (Admin SDK) writes always bypass this.
+      allow write: if isAdmin();
+    }
+
+    // ── /wallet_transactions ──────────────────────────────────────────────────
+    // Members read their own; admins read all. Writes are admin-only
+    // (WalletController runs in admin context or server routes).
+
+    match /wallet_transactions/{txnId} {
+      allow read: if isAdmin() ||
+        (isMember() && resource.data.memberId == currentUid());
+
+      allow write: if isAdmin();
+    }
+
+    // ── /loans ────────────────────────────────────────────────────────────────
+    // Members can create a loan request and read all loans (they need to see
+    // loan status, disbursement dates, etc.).
+    // Only admin can approve, reject, update status, or delete.
+
+    match /loans/{loanId} {
+      allow read: if isAdminOrMember();
+
+      // Members may create a new loan request
+      allow create: if isMember() &&
+        request.resource.data.status == 'PENDING' &&
+        request.resource.data.finderMemberId == currentUid();
+
+      // Members may NOT update loans (no status changes from client)
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── /shares ───────────────────────────────────────────────────────────────
+    // Read: all authenticated users (members need to see their shares).
+    // Write: admin only (shares are created during loan approval by admin flow).
+
+    match /shares/{shareId} {
+      allow read: if isAdminOrMember();
+      allow write: if isAdmin();
+    }
+
+    // ── /emi_payments ─────────────────────────────────────────────────────────
+    // Members can CREATE a payment record (recording EMI received).
+    // Members can read payments for loans they are finder of — or all loans
+    // (simplest: let authenticated users read; data is non-sensitive).
+    // Verification (setting verified:true) is admin-only via update.
+
+    match /emi_payments/{paymentId} {
+      allow read: if isAdminOrMember();
+
+      // Members can record (create) an EMI payment
+      allow create: if isMember() &&
+        request.resource.data.verified == false &&
+        request.resource.data.recordedBy == currentUid();
+
+      // Only admin can verify (update verified field) or delete
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── /withdrawals ──────────────────────────────────────────────────────────
+    // Members can create a withdrawal request for themselves.
+    // Members can read their own requests.
+    // Admin can read all and approve (update status).
+
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAdmin() ||
+        (isMember() && resource.data.memberId == currentUid());
+
+      allow create: if isMember() &&
+        request.resource.data.memberId == currentUid() &&
+        request.resource.data.status == 'PENDING' &&
+        request.resource.data.amount > 0;
+
+      // Members cannot update or delete withdrawals once submitted
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── /plans ────────────────────────────────────────────────────────────────
+    // Plans are read-only for members. Admin manages them.
+
+    match /plans/{planId} {
+      allow read: if isAdminOrMember();
+      allow write: if isAdmin();
+    }
+
+    // ── /notifications ────────────────────────────────────────────────────────
+    // Members read their own. Admin reads all.
+    // Create: admin or server (NotificationController).
+    // Update: member may mark their own as read.
+
+    match /notifications/{notifId} {
+      allow read: if isAdmin() ||
+        (isMember() && resource.data.userId == currentUid());
+
+      allow create: if isAdmin();
+
+      // Member may only update `read` field on their own notifications
+      allow update: if (isAdmin()) ||
+        (isMember() &&
+         resource.data.userId == currentUid() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']));
+
+      allow delete: if isAdmin();
+    }
+
+    // ── /teams ────────────────────────────────────────────────────────────────
+    match /teams/{teamId} {
+      allow read: if isAdminOrMember();
+      allow write: if isAdmin();
+    }
+
+    // ── /customers ────────────────────────────────────────────────────────────
+    match /customers/{customerId} {
+      allow read: if isAdminOrMember();
+      allow write: if isAdminOrMember();
+    }
+
+    // ── /app_meta ─────────────────────────────────────────────────────────────
+    // Contains loan counter and app settings.
+    // Members need read access for loan number generation.
+    // Write is admin-only.
+
+    match /app_meta/{docId} {
+      allow read: if isAdminOrMember();
+      allow write: if isAdmin();
+    }
+  }
+}

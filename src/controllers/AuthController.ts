@@ -7,7 +7,6 @@ import {
 import { auth } from "@/lib/firebase";
 import { getDoc, setDoc, queryDocs, COLLECTIONS, serverTimestamp } from "@/services/FirebaseService";
 import { User } from "@/models/User";
-import { UserRole } from "@/constants/Enums";
 
 export const loginWithPhone = async (email: string, password: string): Promise<void> => {
   await signInWithEmailAndPassword(auth, email, password);
@@ -39,23 +38,25 @@ export const createMemberAccount = async (
   phone: string,
   teamId?: string
 ): Promise<string> => {
-  // For web, admin creates members via Firebase Admin SDK or Cloud Functions
-  // For now, use client-side creation (requires admin to be logged in)
-  const { createUserWithEmailAndPassword } = await import("firebase/auth");
-  const { auth: firebaseAuth } = await import("@/lib/firebase");
-  
-  const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-  const uid = cred.user.uid;
+  // Get the current admin's ID token to authenticate the API route.
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("Not authenticated");
+  const idToken = await currentUser.getIdToken();
 
-  await setDoc(COLLECTIONS.USERS, uid, {
-    uid,
-    name: String(name),
-    phone: String(phone),
-    email: String(email),
-    role: UserRole.MEMBER,
-    teamId: teamId || null,
-    createdAt: serverTimestamp(),
+  const res = await fetch("/api/admin/create-member", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ email, password, name, phone, teamId }),
   });
 
-  return uid;
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to create member account");
+  }
+
+  return data.uid as string;
 };

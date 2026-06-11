@@ -34,11 +34,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           const profile = await getCurrentUserProfile();
           setUserProfile(profile);
+          // Set a lightweight session cookie so middleware can protect /admin routes
+          // without a flash-of-UI. The cookie is HttpOnly-equivalent for the middleware
+          // guard only — real auth is still enforced by Firestore rules + client checks.
+          if (profile?.role === UserRole.ADMIN) {
+            document.cookie = "loanapp_admin_session=1; path=/; SameSite=Strict";
+          } else {
+            document.cookie = "loanapp_admin_session=; path=/; max-age=0";
+          }
         } catch {
           setUserProfile(null);
         }
       } else {
         setUserProfile(null);
+        document.cookie = "loanapp_admin_session=; path=/; max-age=0";
       }
       setLoading(false);
     });

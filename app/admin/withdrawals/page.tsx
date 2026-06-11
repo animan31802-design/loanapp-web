@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import PageHeader from "@/components/shared/PageHeader";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
+import RefreshButton from "@/components/shared/RefreshButton";
 import { getPendingWithdrawals, approveWithdrawal } from "@/controllers/WithdrawalController";
 import { getWalletByMember } from "@/controllers/WalletController";
 import { formatCurrency, formatDate } from "@/utils/Formatters";
@@ -13,7 +14,8 @@ export default function WithdrawalsPage() {
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await getPendingWithdrawals();
       const enriched = await Promise.all(data.map(async (w: any) => {
@@ -23,9 +25,9 @@ export default function WithdrawalsPage() {
       setItems(enriched);
     } catch (e: any) { toast.error(e.message || "Failed"); }
     finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleApprove = async (w: any) => {
     const ret = w.returnsBalance || 0;
@@ -42,7 +44,10 @@ export default function WithdrawalsPage() {
 
   return (
     <div>
-      <PageHeader title="Withdrawal Requests" />
+      <PageHeader
+        title="Withdrawal Requests"
+        action={<RefreshButton onRefresh={loadData} />}
+      />
       <div className="px-4 md:px-6 space-y-3">
         {loading ? <LoadingSpinner /> : items.length === 0 ? (
           <EmptyState icon="💰" title="No Pending Withdrawals" />

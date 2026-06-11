@@ -49,6 +49,7 @@ export const formatTenure = (months: any): string => {
 
 export const formatLoanMode = (mode: LoanMode | null | undefined): string => {
   if (mode === LoanMode.EMI) return 'EMI Mode';
+  if (mode === LoanMode.FLAT_EMI) return 'Flat EMI';
   if (mode === LoanMode.INTEREST_ONLY) return 'Interest Only';
   return '—';
 };

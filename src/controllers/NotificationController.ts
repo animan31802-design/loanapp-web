@@ -1,11 +1,10 @@
-import { db } from "@/lib/firebase";
-import { collection, doc, query, where, getDocs, addDoc, updateDoc, serverTimestamp, orderBy } from "firebase/firestore";
-import { COLLECTIONS } from "@/services/FirebaseService";
+import { queryDocs, addDoc, updateDoc, COLLECTIONS } from "@/services/FirebaseService";
+import { serverTimestamp } from "@/services/FirebaseService";
 import { getAllMembers } from "@/controllers/TeamController";
 
 const sendNotification = async (userId: string, title: string, body: string): Promise<void> => {
   try {
-    await addDoc(collection(db, COLLECTIONS.NOTIFICATIONS || "notifications"), {
+    await addDoc(COLLECTIONS.NOTIFICATIONS, {
       userId: String(userId),
       title: String(title),
       body: String(body),
@@ -24,23 +23,22 @@ const sendNotificationToAll = async (title: string, body: string): Promise<void>
 
 export const getNotificationsByUser = async (userId: string): Promise<any[]> => {
   try {
-    const snap = await getDocs(query(
-      collection(db, COLLECTIONS.NOTIFICATIONS || "notifications"),
-      where("userId", "==", userId),
-      orderBy("createdAt", "desc")
-    ));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return await queryDocs(
+      COLLECTIONS.NOTIFICATIONS,
+      [{ field: "userId", op: "==", value: userId }],
+      "createdAt",
+      "desc"
+    );
   } catch { return []; }
 };
 
 export const markAllRead = async (userId: string): Promise<void> => {
   try {
-    const snap = await getDocs(query(
-      collection(db, COLLECTIONS.NOTIFICATIONS || "notifications"),
-      where("userId", "==", userId),
-      where("read", "==", false)
-    ));
-    await Promise.all(snap.docs.map(d => updateDoc(d.ref, { read: true })));
+    const unread = await queryDocs(COLLECTIONS.NOTIFICATIONS, [
+      { field: "userId", op: "==", value: userId },
+      { field: "read", op: "==", value: false },
+    ]);
+    await Promise.all(unread.map((n: any) => updateDoc(COLLECTIONS.NOTIFICATIONS, n.id, { read: true })));
   } catch (e) { console.log("markAllRead error:", e); }
 };
 

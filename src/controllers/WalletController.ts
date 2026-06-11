@@ -144,6 +144,37 @@ export const refundLoanContributions = async (loanId: string, loanNumber: string
 
 export const getWalletTransactions = async (memberId: string): Promise<WalletTransaction[]> => {
   if (!memberId) return [];
-  const data = await queryDocs(COLLECTIONS.WALLET_TRANSACTIONS, [{ field: "memberId", op: "==", value: memberId }]);
-  return (data as WalletTransaction[]).sort((a: any, b: any) => (b.createdAt?.getTime?.() || 0) - (a.createdAt?.getTime?.() || 0));
+  return (await queryDocs(
+    COLLECTIONS.WALLET_TRANSACTIONS,
+    [{ field: "memberId", op: "==", value: memberId }],
+    "createdAt",
+    "desc"
+  )) as WalletTransaction[];
+};
+
+/**
+ * Called by LoanController.markDisbursed for each share.
+ * Moves contributed amount from investmentBalance → no longer tracked as deployed.
+ * All wallet schema changes stay inside WalletController.
+ */
+export const markShareDisbursed = async (
+  memberId: string,
+  contributedAmt: number
+): Promise<void> => {
+  const wallet = await getWalletByMember(memberId);
+  if (!wallet) return;
+  const contributed = roundMoney(contributedAmt);
+  const currentInvestment = roundMoney(Number(wallet.investmentBalance));
+  // Guard: if investmentBalance was already reduced by deductLoanContributions, don't go negative
+  const newInvestment = roundMoney(Math.max(0, currentInvestment - contributed));
+  const newDeployed = roundMoney(Math.max(0, Number(wallet.deployedBalance) - contributed));
+  const newFree = roundMoney(Math.max(0, newInvestment - newDeployed));
+  const newTotal = roundMoney(newInvestment + Number(wallet.returnsBalance));
+  await updateDoc(COLLECTIONS.WALLETS, wallet.walletId, {
+    investmentBalance: newInvestment,
+    deployedBalance: newDeployed,
+    freeInvestment: newFree,
+    totalBalance: newTotal,
+    updatedAt: serverTimestamp(),
+  });
 };
