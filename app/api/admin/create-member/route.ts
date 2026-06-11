@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 /**
  * POST /api/admin/create-member
@@ -28,23 +31,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // ── 2. Load firebase-admin ─────────────────────────────────────────────────
-    let admin: typeof import("firebase-admin");
-    try {
-      admin = await import("firebase-admin");
-    } catch {
-      return NextResponse.json(
-        { error: "firebase-admin not installed. Run: npm install firebase-admin" },
-        { status: 500 }
-      );
-    }
+    // ── 2. Initialize firebase-admin ────────────────────────────────────────────
+    const svcJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
-    if (!admin.apps.length) {
-      const svcJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-      admin.initializeApp(
+    if (getApps().length === 0) {
+      initializeApp(
         svcJson
-          ? { credential: admin.credential.cert(JSON.parse(svcJson)) }
-          : undefined  // ADC on Google Cloud
+          ? {
+              credential: cert(JSON.parse(svcJson)),
+            }
+          : undefined
       );
     }
 
@@ -58,30 +54,37 @@ export async function POST(req: NextRequest) {
 
     let callerUid: string;
     try {
-      const decoded = await admin.auth().verifyIdToken(idToken);
+      const decoded = await getAuth().verifyIdToken(idToken);
       callerUid = decoded.uid;
     } catch {
       return NextResponse.json({ error: "Unauthorized — invalid token" }, { status: 401 });
     }
 
     // Check Firestore role
-    const callerDoc = await admin.firestore().collection("users").doc(callerUid).get();
+    const callerDoc = await getFirestore()
+      .collection("users")
+      .doc(callerUid)
+      .get();
     if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
       return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
     }
 
     // ── 4. Create the new member ───────────────────────────────────────────────
-    const userRecord = await admin.auth().createUser({ email, password, displayName: name });
+    const userRecord = await getAuth().createUser({
+      email,
+      password,
+      displayName: name
+    });
     const uid = userRecord.uid;
 
-    await admin.firestore().collection("users").doc(uid).set({
+    await getFirestore().collection("users").doc(uid).set({
       uid,
       name: String(name),
       phone: String(phone),
       email: String(email),
       role: "member",
       teamId: teamId || null,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
 
     return NextResponse.json({ uid }, { status: 201 });
